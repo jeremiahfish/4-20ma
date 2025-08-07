@@ -271,6 +271,14 @@
             font-weight: 500;
         }
 
+        .unit-under-bar {
+            text-align: center;
+            margin-top: 6px;
+            font-size: clamp(0.65rem, 2.5vw, 0.85rem);
+            color: #6b7280;
+            font-weight: 500;
+        }
+
         .scale-container {
             padding: 0 8px;
             margin-bottom: 8px;
@@ -1247,9 +1255,9 @@
             <div class="input-group">
                 <label class="input-label secondary">INPUT TYPE</label>
                 <div class="segmented-control">
-                    <input type="radio" id="type-ma" name="inputType" value="ma" checked>
+                    <input type="radio" id="type-ma" name="inputType" value="ma">
                     <label for="type-ma">4-20mA</label>
-                    <input type="radio" id="type-mv10" name="inputType" value="mv10">
+                    <input type="radio" id="type-mv10" name="inputType" value="mv10" checked>
                     <label for="type-mv10">40-200mV</label>
                     <input type="radio" id="type-mv100" name="inputType" value="mv100">
                     <label for="type-mv100">400-2000mV</label>
@@ -1277,7 +1285,7 @@
         let currentSensor = '';
         let currentGasShort = '';
         let lastInput = 'value';
-        let inputType = 'ma'; // 'ma', 'mv10', 'mv100'
+        let inputType = 'mv10'; // 'ma', 'mv10', 'mv100'
 
         // Signal configurations
         const signalConfig = {
@@ -1312,15 +1320,39 @@
 
         // Set input type
         function setInputType(type) {
+            const previousType = inputType; // capture before change
             inputType = type;
             const config = signalConfig[type];
             const signalInputLabel = document.getElementById('signalInputLabel');
             const signalInput = document.getElementById('signalInput');
+            const valueInputEl = document.getElementById('valueInput');
 
+            // Update UI labels/placeholders
             signalInputLabel.innerHTML = `SIGNAL (${config.unit})`;
             signalInput.placeholder = config.unit;
-            
-            clearAll(); // Clear inputs when mode changes
+
+            // Preserve existing values; if value exists, derive signal from value using new config
+            const currentValue = parseFloat(valueInputEl.value);
+            const currentSignal = parseFloat(signalInput.value);
+            const zero = parseFloat(document.getElementById('zeroInput').value) || 0;
+            const upperValue = parseFloat(document.getElementById('spanInput').value) || 100;
+            const span = upperValue - zero;
+
+            if (!isNaN(currentValue) && span !== 0) {
+                lastInput = 'value';
+                calculateFromValue();
+            } else if (!isNaN(currentSignal) && span !== 0) {
+                // Convert from previous signal type to value, then compute new signal
+                const prevCfg = signalConfig[previousType];
+                const percentage = (currentSignal - prevCfg.min) / prevCfg.span;
+                const valueFromSignal = (percentage * span) + zero;
+                valueInputEl.value = valueFromSignal.toFixed(1);
+                lastInput = 'value';
+                calculateFromValue();
+            } else {
+                // Nothing to calculate, just refresh to update labels
+                updateDisplay();
+            }
         }
 
         // Calculate from Process Value
@@ -1388,6 +1420,9 @@
             const zero = parseFloat(document.getElementById('zeroInput').value) || 0;
             const upperValue = parseFloat(document.getElementById('spanInput').value) || 100;
             const value = parseFloat(document.getElementById('valueInput').value);
+            const sigCfg = signalConfig[inputType];
+            const signalVal = parseFloat(document.getElementById('signalInput').value);
+            const displayValueStr = !isNaN(signalVal) ? signalVal.toFixed(sigCfg.precision) : (0).toFixed(sigCfg.precision);
             
             // Update the dynamic label
             valueLabel.textContent = `VALUE in ${currentUom}`;
@@ -1419,9 +1454,9 @@
                     </div>
                     <div class="main-reading">
                         <div class="reading-value">
-                            ${!isNaN(value) ? value.toFixed(1) : "0.0"}
+                            ${displayValueStr}
                         </div>
-                        <div class="percentage">${currentUom}</div>
+                        <div class="percentage">${sigCfg.unit}</div>
                     </div>
                     <div class="scale-container">
                         <div class="scale-labels">
@@ -1434,6 +1469,7 @@
                         <div class="progress-bar">
                             <div class="progress-fill" style="width: ${progressWidth}%"></div>
                         </div>
+                        <div class="unit-under-bar">${currentUom}</div>
                     </div>
                 `;
             } else {
